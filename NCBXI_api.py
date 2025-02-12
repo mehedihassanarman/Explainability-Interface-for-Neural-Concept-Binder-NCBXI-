@@ -204,3 +204,234 @@ def visualize_block(block_idx, codes,model_path):
     plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
     #plt.show()
     print(f'Plot of Visual Concept Block has been saved to "{output_plot_path}"')
+
+
+
+
+# Function for the Implicit Inspection. Direct inspection of the exemplars of a cluster. Generates a plot with exp_per_cluster exemplars of the specified cluster from the specified block
+def implicit_inspection(block_concepts, all_img_locs, block_id: int, cluster_id: int, exp_per_cluster: int = 5, title: str = None):
+
+    # To raise error when block_id or cluster_id out of range
+#    if block_id not in block_concepts:
+#        raise ValueError(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
+#    
+#    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+#        raise ValueError(f"Cluster ID {cluster_id} is out of range for Block {block_id}. "
+#                         f"Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}.")
+    
+        
+    # To print error instead of raise error when block_id or cluster_id out of range
+    if block_id not in block_concepts:
+        print(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
+        return
+    
+    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+        print(f"Cluster ID {cluster_id} is out of range for Block {block_id}. "
+              f"Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}.")
+        return
+   
+
+    #assert block_id in block_concepts, f"Block {block_id} not found in block_concepts."
+    #assert cluster_id < len(block_concepts[block_id]['prototypes']['ids']), "Cluster id exceeds number of clusters."
+
+    output_plot_path = "static/images/plots/Implicit_Inspection/Implicit_Inspection.png"
+
+    exemplar_ids = block_concepts[block_id]['exemplars']['exemplar_ids'][cluster_id]
+    num_exemplars = len(exemplar_ids)
+    if num_exemplars < exp_per_cluster:
+        print(f"Cluster {cluster_id} in Block {block_id} has only {num_exemplars} exemplars. Adjusting to available size.")
+        exp_per_cluster = num_exemplars
+
+    fig, axs = plt.subplots(1, exp_per_cluster, figsize=(15, 5))
+
+    for i in range(exp_per_cluster):
+        exemplar_id = exemplar_ids[i]
+        image_path = all_img_locs[exemplar_id]
+        axs[i].imshow(imread(image_path))
+        axs[i].axis('off')
+        axs[i].set_title(f"Exemplar {i+1}")
+
+    if title:
+        plt.suptitle(title, fontsize=16)
+        plt.savefig(f"plots/{title}.pdf")
+    else:
+        plt.suptitle(f"Implicit Inspection: Block {block_id}, Cluster {cluster_id}", fontsize=16)
+        plt.tight_layout()
+
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(output_plot_path ), exist_ok=True)
+
+        # Delete the previous image if it exists
+        if os.path.exists(output_plot_path):
+            os.remove(output_plot_path )
+
+        # Save the new plot
+        plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
+        #plt.show()
+        print(f'Plot of Implicit Inspection has been saved to "{output_plot_path}"')
+
+
+
+
+
+# Function for the Comparative Inspection. Perform comparative inspection by comparing a given example's activation in the context of a specified block and cluster
+def comparative_inspection(block_concepts, all_img_locs, example_path: str, block_id: int,  max_exemplars: int = 10):
+
+    # To raise error when block_id or cluster_id out of range
+#    if block_id not in block_concepts:
+#        raise ValueError(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
+    
+#    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+#        raise ValueError(f"Cluster ID {cluster_id} is out of range for Block {block_id}. "
+#                         f"Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}.")
+ 
+
+    # To print error instead of raise error when block_id or cluster_id out of range
+    if block_id not in block_concepts:
+        print(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
+        return
+    
+    #assert block_id in block_concepts, f"Block {block_id} not found in block_concepts."
+
+    output_plot_path = "static/images/plots/Comparative_Inspection/Comparative_Inspection.png"
+
+    cluster_data = block_concepts[block_id]['prototypes']
+    prototypes = cluster_data['prototypes']
+    
+    # Load the example image
+    example_tensor = load_img_as_tensor(example_path,device="cpu")
+    
+    # Compute the distance between the example and each prototype
+    distances = [torch.norm(example_tensor - torch.tensor(proto)) for proto in prototypes]
+
+    # Find the closest prototype in the cluster
+    closest_cluster_idx = np.argmin(distances)
+    print(f"Closest cluster for Block {block_id} is Cluster {closest_cluster_idx}.")
+
+    # Get exemplars for the closest cluster
+    exemplar_ids = block_concepts[block_id]['exemplars']['exemplar_ids'][closest_cluster_idx]
+    exemplar_ids = exemplar_ids[:max_exemplars]  # Limit to `max_exemplars`
+
+    # Set up the figure
+    fig, axs = plt.subplots(1, len(exemplar_ids) + 1, figsize=(4 * (len(exemplar_ids) + 1), 4))
+
+    # Display the example image
+    axs[0].imshow(imread(example_path))
+    axs[0].axis("off")
+    axs[0].set_title("Example Image")
+
+    # Display the exemplars for the closest cluster
+    for i, exemplar_id in enumerate(exemplar_ids):
+        image_path = all_img_locs[exemplar_id]
+        axs[i + 1].imshow(imread(image_path))
+        axs[i + 1].axis("off")
+        axs[i + 1].set_title(f"Exemplar {i+1}")
+
+    plt.suptitle(f"Comparative Inspection: Block {block_id}, Cluster {closest_cluster_idx}", fontsize=16)
+    plt.tight_layout()
+    plt.subplots_adjust(wspace=0.5)  # Adjust spacing
+
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(output_plot_path ), exist_ok=True)
+
+    # Delete the previous image if it exists
+    if os.path.exists(output_plot_path):
+        os.remove(output_plot_path )
+
+    # Save the new plot
+    plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
+    #plt.show()
+    print(f'Plot of Comparative Inspection has been saved to "{output_plot_path}"')
+
+
+
+
+
+# Function for the Conceptual Inspection. Perform conceptual inspection by modifying the encoding of an image  with a prototype tensor from the specified block and cluster.
+def conceptual_inspection(block_concepts, model, example_path: str, block_id: int, cluster_id: int, args):
+
+    # To raise error when block_id or cluster_id out of range
+#    if block_id not in block_concepts:
+#        raise ValueError(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
+    
+#    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+#        raise ValueError(f"Cluster ID {cluster_id} is out of range for Block {block_id}. "
+#                         f"Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}.")
+    
+
+    # To print error instead of raise error when block_id or cluster_id out of range
+    if block_id not in block_concepts:
+        print(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
+        return
+    
+    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+        print(f"Cluster ID {cluster_id} is out of range for Block {block_id}. "
+              f"Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}.")
+        return
+    
+
+    output_plot_path = "static/images/plots/Conceptual_Inspection/Conceptual_Inspection.png"
+
+
+    # Validate cluster_id
+    #assert cluster_id < len(block_concepts[block_id]['prototypes']['ids']), f"Cluster id {cluster_id} exceeds the number of clusters."
+
+    # Load the image as a tensor
+    img_tensor = load_img_as_tensor(example_path, model.device)
+
+    # Encode the image
+    enc = model.model.encode(img_tensor)[0]
+
+    # Convert slots to blocks
+    enc = slots_to_blocks(enc, args)
+    #print(f"Encoding shape after reshaping to blocks: {enc.shape}")
+
+    # Verify block_id is valid
+    num_blocks = enc.size(2)  # Number of blocks in the tensor
+    #print(f"Available blocks: {num_blocks}")
+    assert block_id < num_blocks, f"Block ID {block_id} is out of bounds. Available blocks: {num_blocks - 1}"
+
+    # Retrieve the prototype encoding
+    proto_enc = torch.tensor(
+        block_concepts[block_id]['prototypes']['prototypes'][cluster_id],
+        device=enc.device
+    ).unsqueeze(0)  # Ensure correct dimensions
+
+    # Resize prototype if necessary
+    if proto_enc.shape[-1] != enc.shape[-1]:
+        print(f"Resizing prototype from {proto_enc.shape[-1]} to {enc.shape[-1]}")
+        proto_enc = torch.nn.functional.pad(proto_enc, (0, enc.shape[-1] - proto_enc.shape[-1]))
+
+    # Validate prototype dimensions
+    assert proto_enc.shape[-1] == enc.shape[-1], (
+        f"Prototype tensor size mismatch: expected {enc.shape[-1]}, got {proto_enc.shape[-1]}"
+    )
+
+    # Swap the block encoding with the prototype
+    swapped_enc = enc.clone()
+    swapped_enc[:, block_id, :] = proto_enc
+
+    # Reshape back to original slot dimensions for decoding
+    swapped_slots = swapped_enc.view(enc.size(0), -1, args.slot_size)
+
+    # Decode the swapped encoding
+    swapped_img = tensor_img_to_np(model.model.decode(swapped_slots))[0]
+
+    # Display the swapped image with the specified title
+    plt.figure(figsize=(4, 4))
+    plt.imshow(swapped_img)
+    plt.axis('off')
+    plt.title(f"Conceptual Inspection: Block {block_id}, Cluster {cluster_id}", fontsize=12)
+    plt.tight_layout()
+
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(output_plot_path ), exist_ok=True)
+
+    # Delete the previous image if it exists
+    if os.path.exists(output_plot_path):
+        os.remove(output_plot_path )
+
+    # Save the new plot
+    plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
+    #plt.show()
+    print(f'Plot of Conceptual Inspection has been saved to "{output_plot_path}"')
