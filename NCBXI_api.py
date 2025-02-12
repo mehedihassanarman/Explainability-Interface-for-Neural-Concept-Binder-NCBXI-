@@ -175,7 +175,7 @@ def load_img_as_tensor(file_path: str, device: str):
 def visualize_block(block_idx, codes,model_path):
     codes = codes.squeeze(0).cpu().numpy()
     base_path = f"{model_path}clustered_exemplars/"
-    output_plot_path = "plots/Visualize_Concept_Block/Concept_Block.png"
+    output_plot_path = "static/images/plots/Visualize_Concept_Block/Concept_Block.png"
 
     concept_id = int(codes[0, block_idx])
     concept_image_path = os.path.join(base_path, f"block{block_idx}_{concept_id}.png")
@@ -203,3 +203,4 @@ def visualize_block(block_idx, codes,model_path):
     # Save the new plot
     plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
     #plt.show()
+    print(f'Plot of Visual Concept Block has been saved to "{output_plot_path}"')
