@@ -175,6 +175,7 @@ def load_img_as_tensor(file_path: str, device: str):
 def visualize_block(block_idx, codes,model_path):
     codes = codes.squeeze(0).cpu().numpy()
     base_path = f"{model_path}clustered_exemplars/"
+    output_plot_path = "plots/Visualize_Concept_Block/Concept_Block.png"
 
     concept_id = int(codes[0, block_idx])
     concept_image_path = os.path.join(base_path, f"block{block_idx}_{concept_id}.png")
@@ -191,5 +192,14 @@ def visualize_block(block_idx, codes,model_path):
         plt.title(f"Block {block_idx}, Concept {concept_id} (Image Not Found)", fontsize=14)
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
 
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname(output_plot_path ), exist_ok=True)
+
+    # Delete the previous image if it exists
+    if os.path.exists(output_plot_path):
+        os.remove(output_plot_path )
+
+    # Save the new plot
+    plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
+    #plt.show()
