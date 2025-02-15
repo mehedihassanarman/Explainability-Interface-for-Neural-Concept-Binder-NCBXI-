@@ -2,7 +2,7 @@ import os
 import torch
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
-from NCBXI_api import Args, load_model, preprocess_image, run_inference, visualize_block, implicit_inspection, conceptual_inspection, create_block_concepts, preprocess_image_paths
+from NCBXI_api import Args, load_model, preprocess_image, run_inference, visualize_block, implicit_inspection, conceptual_inspection, create_block_concepts, preprocess_image_paths, comparative_inspection
 
 app = Flask(__name__)
 
@@ -112,26 +112,34 @@ def visualize_block_route():
 def implicit_inspection_route():
     """Handles Implicit Inspection request and returns the plot."""
     data = request.get_json()
-    block_id = data.get('block_id')
-    cluster_id = data.get('cluster_id')
-
+    block_id = int(data.get('block_id'))
+    cluster_id = int(data.get('cluster_id'))
+    
     # Create block concepts
     block_concepts = create_block_concepts(args.retrieval_corpus_path)
+
+    if block_id is None or cluster_id is None:
+        return jsonify({"error": "Both Block ID and Cluster ID are required"}), 400
+    
+    # Check if block_id is valid
+    if block_id not in block_concepts:
+        return jsonify({"error": f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}."}), 400
+    
+    # Check if cluster_id is valid
+    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+        return jsonify({"error": f"Cluster ID {cluster_id} is out of range for Block {block_id}. Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}."}), 400
     
     # Preprocess image paths
     all_img_locs = [args.data_dir+f"train/images/CLEVR_4_classid_0_{i:06}.png" for i in range(5000)]
     all_img_locs = preprocess_image_paths(all_img_locs)
-
-    if block_id is None or cluster_id is None:
-        return jsonify({"error": "Both Block ID and Cluster ID are required"}), 400
-
+    
     try:
         # Call the implicit inspection function
-        implicit_inspection(block_concepts, all_img_locs, block_id=int(block_id), cluster_id=int(cluster_id))
-
+        implicit_inspection(block_concepts, all_img_locs, block_id, cluster_id)
+        
         # Path of the saved plot
         plot_path = "static/images/plots/Implicit_Inspection/Implicit_Inspection.png"
-
+        
         if not os.path.exists(plot_path):
             return jsonify({"error": "Visualization image not found!"}), 404
 
@@ -139,27 +147,103 @@ def implicit_inspection_route():
             "message": f"Implicit Inspection Completed for Block {block_id}, Cluster {cluster_id}",
             "plot_url": f"/{plot_path}?t={int(os.path.getmtime(plot_path))}"  # Cache busting
         })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/comparative_inspection', methods=['POST'])
+def comparative_inspection_route():
+    """Handles Comparative Inspection request and returns the plot."""
+    global uploaded_image_path
+    data = request.get_json()
+
+    if uploaded_image_path is None:
+        return jsonify({"error": "Please upload an image before performing Comparative Inspection."}), 400
+
+    try:
+        block_id = int(data.get('block_id'))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Block ID must be an integer."}), 400
+
+    # Create block concepts
+    block_concepts = create_block_concepts(args.retrieval_corpus_path)
+
+    # Validate Block ID
+    if block_id not in block_concepts:
+        return jsonify({"error": f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}."}), 400
+
+    # Preprocess image paths
+    all_img_locs = [args.data_dir+f"train/images/CLEVR_4_classid_0_{i:06}.png" for i in range(5000)]
+    all_img_locs = preprocess_image_paths(all_img_locs)
+
+    try:
+        # Call the comparative inspection function
+        comparative_inspection(block_concepts, all_img_locs, example_path=uploaded_image_path, block_id=block_id, max_exemplars=5)
+
+        # **Ensure the correct path for the plot**
+        plot_path = "static/images/plots/Comparative_Inspection/Comparative_Inspection.png"
+
+        if not os.path.exists(plot_path):
+            return jsonify({"error": "Visualization image not found!"}), 404
+
+        return jsonify({
+            "message": f"Comparative Inspection Completed for Block {block_id}",
+            "plot_url": f"/{plot_path}?t={int(os.path.getmtime(plot_path))}"  # **Cache busting**
+        })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# Explicitly serve static images for comparative inspection
+@app.route('/static/images/plots/Comparative_Inspection/<filename>')
+def serve_comparative_inspection_image(filename):
+    return send_from_directory("static/images/plots/Comparative_Inspection", filename)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @app.route('/conceptual_inspection', methods=['POST'])
 def conceptual_inspection_route():
     """Handles Conceptual Inspection request and returns the plot."""
     global uploaded_image_path
     data = request.get_json()
-    block_id = data.get('block_id')
-    cluster_id = data.get('cluster_id')
 
-    if block_id is None or cluster_id is None or uploaded_image_path is None:
-        return jsonify({"error": "Block ID, Cluster ID, and an uploaded image are required"}), 400
+    if uploaded_image_path is None:
+        return jsonify({"error": "Please upload an image before performing Conceptual Inspection."}), 400
+
+    try:
+        block_id = int(data.get('block_id'))
+        cluster_id = int(data.get('cluster_id'))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Block ID and Cluster ID must be integers."}), 400
 
     # Create block concepts
     block_concepts = create_block_concepts(args.retrieval_corpus_path)
 
+    # Validate Block ID
+    if block_id not in block_concepts:
+        return jsonify({"error": f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}."}), 400
+
+    # Validate Cluster ID
+    max_clusters = len(block_concepts[block_id]['prototypes']['ids'])
+    if cluster_id >= max_clusters:
+        return jsonify({"error": f"Cluster ID {cluster_id} is out of range for Block {block_id}. Available clusters: {max_clusters - 1}."}), 400
+
     try:
         # Call the conceptual inspection function
-        conceptual_inspection(block_concepts, model, example_path=uploaded_image_path, block_id=int(block_id), cluster_id=int(cluster_id), args=args)
+        conceptual_inspection(block_concepts, model, example_path=uploaded_image_path, block_id=block_id, cluster_id=cluster_id, args=args)
 
         # Path of the saved plot
         plot_path = "static/images/plots/Conceptual_Inspection/Conceptual_Inspection.png"
@@ -174,6 +258,8 @@ def conceptual_inspection_route():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+
 
 @app.route('/reset', methods=['POST'])
 def reset():
