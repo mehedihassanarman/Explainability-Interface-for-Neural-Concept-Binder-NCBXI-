@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>NCBXI</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+
+  <div class="top-header">
+    <h1>Explainable Interface for Neural Concept Binder (NCBXI)</h1>
+  </div>
+
+  <div class="content-container">
+    <!-- Left Section -->
+    <div class="left">
+      <!-- Modern box design for "Select Image" -->
+      <div class="modern-box">
+        <h2 class="section-heading">Select Image</h2>
+      </div>
+
+      <div class="image-container">
+        <button class="nav-button prev" onclick="prevImage()">&#10094;</button>
+        <img id="display-image" src="{{ url_for('get_image', filename=first_image) }}" alt="Image" onclick="openGallery()" loading="lazy">
+        <button class="nav-button next" onclick="nextImage()">&#10095;</button>
+      </div>
+      <div id="selected-image-name" onclick="openGallery()">{{ first_image }}</div>
+
+      <div class="run-model-container">
+        <form id="run-model-form" action="/run_model" method="POST">
+          <input type="hidden" name="image_path" id="selected-image-path" value="{{ first_image }}">
+          <button type="submit" class="btn-elegant" style="border-radius:25px;">Run Model</button>
+        </form>
+      </div>
+
+      <!-- The device/codes box -->
+      <div id="model-info-box" class="modern-info-box">
+        <p class="info-line" id="device-line" style="display:none;"></p>
+        <p class="info-line" id="codes-line" style="display:none;"></p>
+      </div>
+    </div>
+
+    <!-- Middle Section -->
+    <div class="middle">
+      <!-- Modern box design for "Image Analysis" -->
+      <div class="modern-box">
+        <h2 class="section-heading">Image Analysis</h2>
+      </div>
+
+      <div class="accordion-container">
+        <!-- Visualization -->
+        <button type="button" class="accordion-btn" onclick="toggleAccordion('visualization-section')">
+          Concepts Block Visualization
+        </button>
+        <div id="visualization-section" class="accordion-content" style="display: none;">
+          <div style="display: none;">
+            <form id="visualization-form" action="/visualization" method="POST">
+              <input type="hidden" name="image_path" id="selected-image-path-visualization">
+              <label for="block_id">Block ID:</label>
+              <input type="number" name="block_id" required>
+              <button type="submit" class="btn-elegant">Run Visualization</button>
+            </form>
+          </div>
+
+          <h3 class="modern-heading">Choose a Concept Block to Visualize</h3>
+          <div class="block-buttons-container">
+            {% for b in range(16) %}
+            <button class="btn-elegant block-button" onclick="runVisualization('{{ b }}')">
+              Block {{ b }}
+            </button>
+            {% endfor %}
+          </div>
+
+          <hr style="margin: 20px 0;">
+
+          <div style="text-align:center;">
+            <button class="btn-elegant" id="toggle-feedback-btn" style="margin-bottom:10px; border-radius:0px;" onclick="toggleFeedbackSection()">
+              Feedback for Visualization Blocks
+            </button>
+          </div>
+
+          <!-- Make "Feedback is only available..." in Comic Sans, bold, size 16 -->
+          <div id="visualization-feedback-section" style="display:none; text-align:center;">
+            <div id="feedback-not-available" 
+                 style="font-family:'Comic Sans MS'; font-weight:bold; font-size:16px; color:#B71C1C; display:none;">
+              Feedback is only available for Visualization blocks
+            </div>
+
+            <div id="feedback-options" style="display:none; margin-top: 15px;">
+              <div class="feedback-buttons-grid">
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('cube')">cube</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('sphere')">sphere</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('cylinder')">cylinder</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('small')">small</button>
+
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('large')">large</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('metal')">metal</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('rubber')">rubber</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('gray')">gray</button>
+
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('red')">red</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('blue')">blue</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('green')">green</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('brown')">brown</button>
+
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('purple')">purple</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('cyan')">cyan</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('yellow')">yellow</button>
+                <button class="btn-elegant feedback-btn" onclick="submitFeedback('uncertain')">uncertain</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Implicit -->
+        <button type="button" class="accordion-btn" onclick="toggleAccordion('implicit-section')">
+          Implicit Inspection
+        </button>
+        <div id="implicit-section" class="accordion-content" style="display: none;">
+          <div class="modern-form">
+            <p>Inspect the model to explore the examples of this concept</p>
+            <form id="implicit-inspection-form" action="/implicit_inspection" method="POST">
+              <input type="hidden" name="image_path" id="selected-image-path-implicit">
+              <div class="form-row">
+                <label for="block_id">Block ID:</label>
+                <input type="number" name="block_id" required>
+              </div>
+              <div class="form-row">
+                <label for="cluster_id">Cluster ID:</label>
+                <input type="number" name="cluster_id" required>
+              </div>
+              <!-- Center the button -->
+              <div style="text-align:center;">
+                <button type="submit" class="btn-elegant">Run Implicit Inspection</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Comparative -->
+        <button type="button" class="accordion-btn" onclick="toggleAccordion('comparative-section')">
+          Comparative Inspection
+        </button>
+        <div id="comparative-section" class="accordion-content" style="display: none;">
+          <div class="modern-form">
+            <p>Compare two specifically different concepts</p>
+            <form id="comparative-inspection-form" action="/comparative_inspection" method="POST">
+              <input type="hidden" name="image_path" id="selected-image-path-comparative">
+              <div class="form-row">
+                <label for="block_id">Block ID:</label>
+                <input type="number" name="block_id" required>
+              </div>
+              <!-- Center the button -->
+              <div style="text-align:center;">
+                <button type="submit" class="btn-elegant">Run Comparative Inspection</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Conceptual -->
+        <button type="button" class="accordion-btn" onclick="toggleAccordion('conceptual-section')">
+          Conceptual Inspection
+        </button>
+        <div id="conceptual-section" class="accordion-content" style="display: none;">
+          <div class="modern-form">
+            <p>Interventional inspection to view the object concept</p>
+            <form id="conceptual-inspection-form" action="/conceptual_inspection" method="POST">
+              <input type="hidden" name="image_path" id="selected-image-path-conceptual">
+              <div class="form-row">
+                <label for="block_id">Block ID:</label>
+                <input type="number" name="block_id" required>
+              </div>
+              <div class="form-row">
+                <label for="cluster_id">Cluster ID:</label>
+                <input type="number" name="cluster_id" required>
+              </div>
+              <!-- Center the button -->
+              <div style="text-align:center;">
+                <button type="submit" class="btn-elegant">Run Conceptual Inspection</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Section -->
+    <div class="right">
+      <!-- Modern box design for "Generated Plots" -->
+      <div class="modern-box">
+        <h2 class="modern-subtitle">Generated Plots</h2>
+      </div>
+
+      {% if plot_paths %}
+        {% for plot in plot_paths %}
+          <img src="{{ plot }}" alt="Generated Plot" class="plot-image">
+        {% endfor %}
+      {% else %}
+        <!-- Comic Sans, bold, size 16 from the start -->
+        <p style="font-family:'Comic Sans MS'; font-weight:bold; font-size:16px;">
+          No plots generated yet.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Gallery Modal -->
+  <div id="galleryModal" class="modal">
+    <div class="modal-header">
+      <span>Select an Image</span>
+      <button class="close-btn" onclick="closeGallery()">X</button>
+    </div>
+    <div class="modal-content">
+      <div class="gallery-container" id="gallery-container"></div>
+    </div>
+    <div class="modal-footer">
+      <span>CLEVR_4_classid Images</span>
+    </div>
+  </div>
+  <div id="overlay" class="overlay" onclick="closeGallery()"></div>
+
+  <!-- Plot Modal -->
+  <div id="plotModal" class="plot-modal">
+    <div class="plot-modal-content">
+      <span class="plot-close-btn" onclick="closePlotModal()">×</span>
+      <img id="plotModalImage" src="" alt="Enlarged Plot" />
+    </div>
+  </div>
+
+  <!-- JSON Serialization Fix -->
+  <script id="image-data" type="application/json">
+    {{ image_list | tojson if image_list else '[]' }}
+  </script>
+  <script id="first-image" type="application/json">
+    {{ first_image | tojson if first_image else '""' }}
+  </script>
+  
+  <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
