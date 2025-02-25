@@ -100,9 +100,6 @@ def preprocess_image(image_path, img_size):
     return transform(image).unsqueeze(0), image
 
 
-
-
-
 # Run inference for the input image
 def run_inference(image_tensor, model, device):
     image_tensor = image_tensor.to(device)
@@ -167,6 +164,51 @@ def load_img_as_tensor(file_path: str, device: str):
     ])
     img = Image.open(file_path).convert("RGB")
     return transform(img).unsqueeze(0).to(device)
+
+
+#new functions for comparative inspection
+def slot_by_image(encoding: torch.tensor):
+    """Return the slot in which the object is located."""
+    slot_sums = np.zeros(4)
+    for s in range(4):
+        slot = encoding[:, s, :].unsqueeze(0)
+        img = model.model.decode(slot)
+        slot_sums[s] += img.sum().item()
+    return np.argmin(slot_sums)
+
+
+def slot_based_on_encoding(encoding: torch.tensor):
+    """Infer the slot where the object is located based on encoding."""
+    encoding = encoding[0]
+    res = np.zeros(encoding.shape[0])
+    for i in range(encoding.shape[0]):
+        res[i] = sum(torch.abs(encoding[i] - encoding[j]).sum().item() for j in range(encoding.shape[0]))
+    return np.argmax(res)
+
+
+def swap_block(source: torch.tensor, target: torch.tensor, block_id: int):
+    """Swaps block data between source and target encodings."""
+    t = target.clone()
+    s = source.clone()
+    tmp = t[:, block_id].clone()
+    t[:, block_id] = s[:, block_id]
+    s[:, block_id] = tmp
+    return s, t
+
+
+def vis_clusters_by_random_generations(block_concepts):
+    """Visualize random generations for clusters in all blocks."""
+    proto_generation = []
+    for block_id, block_data in block_concepts.items():
+        prototypes = block_data['prototypes']['prototypes']
+        exemplars = block_data['exemplars']['exemplars']
+        for cluster_id, prototype in enumerate(prototypes):
+            cluster_imgs = [load_img_as_tensor(exemplar) for exemplar in exemplars[cluster_id]]
+            proto_generation.append((block_id, cluster_id, cluster_imgs))
+    return proto_generation
+
+
+#end of new functions for comparative inspection
 
 
 
@@ -275,7 +317,7 @@ def implicit_inspection(block_concepts, all_img_locs, block_id: int, cluster_id:
 
 
 # Function for the Comparative Inspection. Perform comparative inspection by comparing a given example's activation in the context of a specified block and cluster
-def comparative_inspection(block_concepts, all_img_locs, example_path: str, block_id: int,  max_exemplars: int = 10):
+def comparative_inspection(block_concepts, all_img_locs, model, example_path: str, block_id: int, cluster_id: int, num_exemplars: int = 3):
 
     # To raise error when block_id or cluster_id out of range
 #    if block_id not in block_concepts:
@@ -291,45 +333,79 @@ def comparative_inspection(block_concepts, all_img_locs, example_path: str, bloc
         print(f"Block ID {block_id} is out of range. Available blocks: {list(block_concepts.keys())}.")
         return
     
+    if cluster_id >= len(block_concepts[block_id]['prototypes']['ids']):
+        print(f"Cluster {cluster_id} is out of range for Block {block_id}. "
+              f"Available clusters: {len(block_concepts[block_id]['prototypes']['ids']) - 1}.")
+        return
+
+
     #assert block_id in block_concepts, f"Block {block_id} not found in block_concepts."
 
     output_plot_path = "static/images/plots/Comparative_Inspection/Comparative_Inspection.png"
 
-    cluster_data = block_concepts[block_id]['prototypes']
-    prototypes = cluster_data['prototypes']
+    # Load and preprocess the example image
+    example_tensor, _ = preprocess_image(example_path, 128)
+    example_tensor = example_tensor.to(model.device)
+
+    # Encode the image using the model
+    enc, _ = run_inference(example_tensor, model, model.device)
+
+    # Determine the closest cluster from encoding
+    if len(enc.shape) == 2:  
+        closest_cluster = int(enc[0, block_id].item())
+    elif len(enc.shape) == 3:
+        slot = slot_based_on_encoding(enc)  # Identify the most activated slot
+        closest_cluster = int(enc[0, slot, block_id].item())
+    else:
+        print(f"Unexpected encoding shape: {enc.shape}")
+        return
+
+    print(f"Closest cluster for Block {block_id}: {closest_cluster}. Comparing against Cluster {cluster_id}.")
+
+    # Get exemplars from the closest cluster
+    closest_exemplars = block_concepts[block_id]['exemplars']['exemplar_ids'][closest_cluster]
+    exemplars_closest = list(closest_exemplars[:num_exemplars])  # Convert to list
+
+    # Get exemplars from the different cluster
+    different_exemplars = block_concepts[block_id]['exemplars']['exemplar_ids'][cluster_id]
+    exemplars_different = list(different_exemplars[:num_exemplars])  # Convert to list
+
+    # Ensure we have enough images
+    if len(exemplars_closest) < num_exemplars:
+        print(f"Warning: Closest cluster {closest_cluster} in Block {block_id} has only {len(exemplars_closest)} exemplars.")
     
-    # Load the example image
-    example_tensor = load_img_as_tensor(example_path,device="cpu")
-    
-    # Compute the distance between the example and each prototype
-    distances = [torch.norm(example_tensor - torch.tensor(proto)) for proto in prototypes]
+    if len(exemplars_different) < num_exemplars:
+        print(f"Warning: Cluster {cluster_id} in Block {block_id} has only {len(exemplars_different)} exemplars.")
 
-    # Find the closest prototype in the cluster
-    closest_cluster_idx = np.argmin(distances)
-    print(f"Closest cluster for Block {block_id} is Cluster {closest_cluster_idx}.")
+    # Merge into a single list (first `num_exemplars` from closest, then `num_exemplars` from different)
+    all_exemplars = exemplars_closest + exemplars_different  
 
-    # Get exemplars for the closest cluster
-    exemplar_ids = block_concepts[block_id]['exemplars']['exemplar_ids'][closest_cluster_idx]
-    exemplar_ids = exemplar_ids[:max_exemplars]  # Limit to `max_exemplars`
+    # If not enough images, pad with available ones
+    while len(all_exemplars) < num_exemplars * 2:
+        all_exemplars.append(all_exemplars[-1])  # Repeat last image
 
-    # Set up the figure
-    fig, axs = plt.subplots(1, len(exemplar_ids) + 1, figsize=(4 * (len(exemplar_ids) + 1), 4))
+    # Set up the figure with subplots (1 input image + 2 * num_exemplars exemplars)
+    fig, axs = plt.subplots(1, 1 + num_exemplars * 2, figsize=(5 * (1 + num_exemplars * 2), 5))
 
-    # Display the example image
+    # Display input image
     axs[0].imshow(imread(example_path))
-    axs[0].axis("off")
-    axs[0].set_title("Example Image")
+    axs[0].axis('off')
+    axs[0].set_title("Input Image", fontsize=12, pad=10)
 
-    # Display the exemplars for the closest cluster
-    for i, exemplar_id in enumerate(exemplar_ids):
-        image_path = all_img_locs[exemplar_id]
-        axs[i + 1].imshow(imread(image_path))
-        axs[i + 1].axis("off")
-        axs[i + 1].set_title(f"Exemplar {i+1}")
+    # Display exemplars from the closest cluster
+    for i in range(num_exemplars):
+        axs[i + 1].imshow(imread(all_img_locs[all_exemplars[i]]))
+        axs[i + 1].axis('off')
+        axs[i + 1].set_title(f"Closest {i+1}", fontsize=10, pad=8)
 
-    plt.suptitle(f"Comparative Inspection: Block {block_id}, Cluster {closest_cluster_idx}", fontsize=16)
-    plt.tight_layout()
-    plt.subplots_adjust(wspace=0.5)  # Adjust spacing
+    # Display exemplars from the different cluster
+    for i in range(num_exemplars):
+        axs[num_exemplars + 1 + i].imshow(imread(all_img_locs[all_exemplars[num_exemplars + i]]))
+        axs[num_exemplars + 1 + i].axis('off')
+        axs[num_exemplars + 1 + i].set_title(f"Different {i+1}", fontsize=10, pad=8)
+
+    plt.suptitle(f"Comparative Inspection: Block {block_id}\nClosest Cluster {closest_cluster} vs. Cluster {cluster_id}", fontsize=14, y=1.05)
+
 
     # Ensure the directory exists
     os.makedirs(os.path.dirname(output_plot_path ), exist_ok=True)
@@ -339,9 +415,10 @@ def comparative_inspection(block_concepts, all_img_locs, example_path: str, bloc
         os.remove(output_plot_path )
 
     # Save the new plot
-    plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
-    #plt.show()
+    plt.savefig(output_plot_path , bbox_inches="tight", dpi=600)
+    plt.show()
     print(f'Plot of Comparative Inspection has been saved to "{output_plot_path}"')
+
 
 
 
@@ -432,6 +509,6 @@ def conceptual_inspection(block_concepts, model, example_path: str, block_id: in
         os.remove(output_plot_path )
 
     # Save the new plot
-    plt.savefig(output_plot_path , bbox_inches="tight", dpi=300)
+    plt.savefig(output_plot_path , bbox_inches="tight", dpi=600)
     #plt.show()
     print(f'Plot of Conceptual Inspection has been saved to "{output_plot_path}"')
