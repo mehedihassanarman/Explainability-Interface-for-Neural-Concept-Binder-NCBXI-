@@ -424,8 +424,8 @@ def comparative_inspection(block_concepts, all_img_locs, model, example_path: st
 
 
 
-# Function for the Conceptual Inspection. Perform conceptual inspection by modifying the encoding of an image  with a prototype tensor from the specified block and cluster.
-def conceptual_inspection(block_concepts, model, example_path: str, block_id: int, cluster_id: int, args):
+# Function for the Interventional Inspection. Perform Interventional inspection by modifying the encoding of an image  with a prototype tensor from the specified block and cluster.
+def interventional_inspection(block_concepts, model, example_path: str, block_id: int, cluster_id: int, args):
 
     # To raise error when block_id or cluster_id out of range
 #    if block_id not in block_concepts:
@@ -447,7 +447,7 @@ def conceptual_inspection(block_concepts, model, example_path: str, block_id: in
         return
     
 
-    output_plot_path = "static/images/plots/Conceptual_Inspection/Conceptual_Inspection.png"
+    output_plot_path = "static/images/plots/Interventional_Inspection/Interventional_Inspection.png"
 
 
     # Validate cluster_id
@@ -498,7 +498,7 @@ def conceptual_inspection(block_concepts, model, example_path: str, block_id: in
     plt.figure(figsize=(4, 4))
     plt.imshow(swapped_img)
     plt.axis('off')
-    plt.title(f"Conceptual Inspection: Block {block_id}, Cluster {cluster_id}", fontsize=12)
+    plt.title(f"Interventional Inspection: Block {block_id}, Cluster {cluster_id}", fontsize=12)
     plt.tight_layout()
 
     # Ensure the directory exists
@@ -510,5 +510,5 @@ def conceptual_inspection(block_concepts, model, example_path: str, block_id: in
 
     # Save the new plot
     plt.savefig(output_plot_path , bbox_inches="tight", dpi=600)
-    #plt.show()
-    print(f'Plot of Conceptual Inspection has been saved to "{output_plot_path}"')
+    plt.show()
+    print(f'Plot of Interventional Inspection has been saved to "{output_plot_path}"')
